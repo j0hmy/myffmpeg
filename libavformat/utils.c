@@ -537,6 +537,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 int avformat_open_input(AVFormatContext **ps, const char *filename,
                         AVInputFormat *fmt, AVDictionary **options)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny uitls avformat_open_input");
     AVFormatContext *s = *ps;
     int i, ret = 0;
     AVDictionary *tmp = NULL;
@@ -545,6 +546,17 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
 
     if (!s && !(s = avformat_alloc_context()))
         return AVERROR(ENOMEM);
+
+    if (!(&s->interrupt_callback)){
+           //解决请求阻塞问题，增加超时机制 modified by johnny 2021-4-20
+           s->interrupt_callback.callback = avformat_check_timeout_interrupt_callback;
+           s->interrupt_callback.opaque = (void*)s;
+           time_t start_time;
+           start_time = time(NULL);
+           int l = time(&start_time);
+           s->timeout_st = l;//记录开始时间 秒
+    }
+
     if (!s->av_class) {
         av_log(NULL, AV_LOG_ERROR, "Input context has not been properly allocated by avformat_alloc_context() and is not NULL either\n");
         return AVERROR(EINVAL);

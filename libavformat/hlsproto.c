@@ -255,6 +255,8 @@ static int hls_read(URLContext *h, uint8_t *buf, int size)
 
 start:
     if (s->seg_hd) {
+    //目前Android ijkplayer播发HLS 没有使用这个 johnny 2021-4-19
+        av_log(h, AV_LOG_DEBUG, "johnny ff_hls_protocol->hls_read() s->seg_hd ffurl_read ");
         ret = ffurl_read(s->seg_hd, buf, size);
         if (ret > 0)
             return ret;
@@ -296,7 +298,7 @@ retry:
         goto retry;
     }
     url = s->segments[s->cur_seq_no - s->start_seq_no]->url,
-    av_log(h, AV_LOG_DEBUG, "opening %s\n", url);
+    av_log(h, AV_LOG_DEBUG, "johnny ff_hls_protocol->hls_read() opening %s\n", url);
     ret = ffurl_open_whitelist(&s->seg_hd, url, AVIO_FLAG_READ,
                                &h->interrupt_callback, NULL,
                                h->protocol_whitelist, h->protocol_blacklist, h);

@@ -45,7 +45,9 @@ if [ -z "$2" ]; then
     exit
 fi
 
-NEW_REVISION="#define FFMPEG_VERSION \"$version\""
+#NEW_REVISION="#define FFMPEG_VERSION \"$version\""
+# ff4.0--ijk0.8.8--20210205--001-johnny-20210421
+NEW_REVISION="#define FFMPEG_VERSION \"ff4.0--ijk0.8.8--20210205--001-johnny-20210421\""
 OLD_REVISION=$(cat "$2" 2> /dev/null | head -4 | tail -1)
 
 # String used for preprocessor guard

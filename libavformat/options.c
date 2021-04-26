@@ -112,7 +112,17 @@ static int io_open_default(AVFormatContext *s, AVIOContext **pb,
     } else
         loglevel = AV_LOG_INFO;
 
-    av_log(s, loglevel, "Opening \'%s\' for %s\n", url, flags & AVIO_FLAG_WRITE ? "writing" : "reading");
+    av_log(s, loglevel, "io_open_default Opening \'%s\' for %s\n", url, flags & AVIO_FLAG_WRITE ? "writing" : "reading");
+
+    if (!(&s->interrupt_callback)){
+               //解决请求阻塞问题，增加超时机制 modified by johnny 2021-4-20
+               s->interrupt_callback.callback = avformat_check_timeout_interrupt_callback;
+               s->interrupt_callback.opaque = (void*)s;
+               time_t start_time;
+               start_time = time(NULL);
+               int l = time(&start_time);
+               s->timeout_st = l;//记录开始时间 秒
+        }
 
 #if FF_API_OLD_OPEN_CALLBACKS
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -131,6 +141,7 @@ static void io_close_default(AVFormatContext *s, AVIOContext *pb)
 
 static void avformat_get_context_defaults(AVFormatContext *s)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny options avformat_get_context_defaults");
     memset(s, 0, sizeof(AVFormatContext));
 
     s->av_class = &av_format_context_class;

@@ -2693,6 +2693,7 @@ out:
 
 static int decode_interrupt_cb(void *ctx)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny ffplay decode_interrupt_cb");
     VideoState *is = ctx;
     return is->abort_request;
 }

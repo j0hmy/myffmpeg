@@ -938,6 +938,7 @@ uint64_t ffio_read_varlen(AVIOContext *bc){
 
 static int io_read_packet(void *opaque, uint8_t *buf, int buf_size)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny aviobuf io_read_packet start");
     AVIOInternal *internal = opaque;
     return ffurl_read(internal->h, buf, buf_size);
 }

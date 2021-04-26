@@ -219,6 +219,7 @@ typedef struct HLSContext {
     AVIOContext *playlist_pb;
     int hls_io_protocol_enable;
     char * hls_io_protocol;
+    int timeout_st;//超时设置的开始时间 johnny 2021-4-16
 } HLSContext;
 
 static void free_segment_list(struct playlist *pls)
@@ -605,6 +606,21 @@ static void update_options(char **dest, const char *name, void *src)
     if (*dest && !strlen(*dest))
         av_freep(dest);
 }
+/**
+ * 检查是否超时的回调 解决 johnny 2021-4-16
+ */
+static int hls_check_timeout_interrupt_callback(void *ctx)
+{
+    if(ctx == NULL)
+        return 0;
+    URLContext* p = ctx;
+    time_t et;
+    et = time(NULL);
+    int l = time(&et);
+    av_log(NULL, AV_LOG_WARNING,"johnny hls url check_timeout start time:%d\n",p->timeout_st);
+    av_log(NULL, AV_LOG_WARNING,"johnny hls url check_timeout end time:%d\n",l);
+    return l - p->timeout_st >= 3 ? 1 : 0;//3秒超时
+}
 
 static int open_url_keepalive(AVFormatContext *s, AVIOContext **pb,
                               const char *url)
@@ -615,6 +631,19 @@ static int open_url_keepalive(AVFormatContext *s, AVIOContext **pb,
     int ret;
     URLContext *uc = ffio_geturlcontext(*pb);
     av_assert0(uc);
+
+    /* set nonblocking mode */
+    //uc->flags |= AVIO_FLAG_NONBLOCK;
+
+    uc->rw_timeout = 3000000;//单位微妙 mcs 设置超时为3秒
+    uc->interrupt_callback.callback = hls_check_timeout_interrupt_callback;
+    uc->interrupt_callback.opaque = (void*)uc;
+    time_t start_time;
+    start_time = time(NULL);
+    int l = time(&start_time);
+    uc->timeout_st = l;//记录开始时间 秒
+    //解决请求阻塞问题，增加超时机制 modified by johnny 2021-4-16
+    av_log(s, AV_LOG_WARNING, "johnny hls open_url_keepalive() set timeout 3s\n");
     (*pb)->eof_reached = 0;
     ret = ff_http_do_new_request(uc, url);
     if (ret < 0) {
@@ -623,6 +652,7 @@ static int open_url_keepalive(AVFormatContext *s, AVIOContext **pb,
     return ret;
 #endif
 }
+
 
 static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
                     AVDictionary *opts, AVDictionary *opts2, int *is_http_out)
@@ -636,6 +666,14 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
     av_dict_copy(&tmp, opts, 0);
     av_dict_copy(&tmp, opts2, 0);
     av_dict_set(&tmp, "seekable", "1", 0);
+    //解决请求阻塞问题，增加超时机制 modified by johnny 2021-4-20
+    av_dict_set(&tmp, "timeout",  "3000000", 0);
+    av_dict_set(&tmp, "rw_timeout",  "3000000", 0);
+    av_dict_set(&tmp, "stimeout",  "3000000", 0);
+    av_dict_set(&tmp, "open_timeout",  "3000000", 0);//tcp
+    av_dict_set(&tmp, "listen_timeout",  "3000000", 0);//tcp
+    av_dict_set(&tmp, "addrinfo_timeout",  "3000000", 0);//tcp
+    av_dict_set(&tmp, "dns_cache_timeout",  "3000000", 0);//tcp
 
     if (av_strstart(url, "crypto", NULL)) {
         if (url[6] == '+' || url[6] == ':')
@@ -670,7 +708,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
         ;
     else if (strcmp(proto_name, "file") || !strncmp(url, "file,", 5))
         return AVERROR_INVALIDDATA;
-
+    av_log(s, AV_LOG_WARNING, "johnny hls open_url()\n");
     if (is_http && c->http_persistent && *pb) {
         ret = open_url_keepalive(c->ctx, pb, url);
         if (ret == AVERROR_EXIT) {
@@ -711,6 +749,7 @@ static int open_url(AVFormatContext *s, AVIOContext **pb, const char *url,
 static int parse_playlist(HLSContext *c, const char *url,
                           struct playlist *pls, AVIOContext *in)
 {
+    av_log(c, AV_LOG_DEBUG, "johnny hls parse_playlist start\n");
     int ret = 0, is_segment = 0, is_variant = 0;
     int64_t duration = 0, previous_duration1 = 0, previous_duration = 0, total_duration = 0;
     enum KeyType key_type = KEY_NONE;
@@ -776,6 +815,7 @@ static int parse_playlist(HLSContext *c, const char *url,
         url = new_url;
 
     ff_get_chomp_line(in, line, sizeof(line));
+    av_log(c, AV_LOG_DEBUG, "johnny hls parse_playlist: %s\n", line);
     if (strcmp(line, "#EXTM3U")) {
         ret = AVERROR_INVALIDDATA;
         goto fail;
@@ -788,6 +828,7 @@ static int parse_playlist(HLSContext *c, const char *url,
     }
     while (!avio_feof(in)) {
         ff_get_chomp_line(in, line, sizeof(line));
+        av_log(c, AV_LOG_DEBUG, "johnny hls parse_playlist: %s\n", line);
         if (av_strstart(line, "#EXT-X-STREAM-INF:", &ptr)) {
             is_variant = 1;
             memset(&variant_info, 0, sizeof(variant_info));
@@ -1225,7 +1266,7 @@ static int open_input(HLSContext *c, struct playlist *pls, struct segment *seg, 
         av_dict_set_int(&opts, "end_offset", seg->url_offset + seg->size, 0);
     }
 
-    av_log(pls->parent, AV_LOG_VERBOSE, "HLS request for url '%s', offset %"PRId64", playlist %d\n",
+    av_log(pls->parent, AV_LOG_VERBOSE, "johnny HLS request for url '%s', offset %"PRId64", playlist %d\n",
            seg->url, seg->url_offset, pls->index);
 
     if (seg->key_type == KEY_NONE) {
@@ -1825,6 +1866,8 @@ static int hls_close(AVFormatContext *s)
 
 static int hls_read_header(AVFormatContext *s, AVDictionary **options)
 {
+    av_log(s, AV_LOG_WARNING, "johnny hls_read_header start\n");
+
     void *u = (s->flags & AVFMT_FLAG_CUSTOM_IO) ? NULL : s->pb;
     HLSContext *c = s->priv_data;
     int ret = 0, i;
@@ -1937,6 +1980,13 @@ static int hls_read_header(AVFormatContext *s, AVDictionary **options)
             ret = AVERROR(ENOMEM);
             goto fail;
         }
+        //解决请求阻塞问题，增加超时机制 modified by johnny 2021-4-20
+        pls->ctx->interrupt_callback.callback = avformat_check_timeout_interrupt_callback;
+        pls->ctx->interrupt_callback.opaque = (void*)pls->ctx;
+        time_t start_time;
+        start_time = time(NULL);
+        int l = time(&start_time);
+        pls->ctx->timeout_st = l;//记录开始时间 秒
 
         if (pls->n_segments == 0)
             continue;
@@ -1986,7 +2036,17 @@ static int hls_read_header(AVFormatContext *s, AVDictionary **options)
         if ((ret = ff_copy_whiteblacklists(pls->ctx, s)) < 0)
             goto fail;
 
-        ret = avformat_open_input(&pls->ctx, pls->segments[0]->url, in_fmt, NULL);
+        //解决请求阻塞问题，增加超时机制 modified by johnny 2021-4-16
+        av_log(s, AV_LOG_WARNING, "johnny hls_read_header set timeout 3s\n");
+        av_dict_set(&c->avio_opts, "timeout",  "3000000", 0);
+        av_dict_set(&c->avio_opts, "rw_timeout",  "3000000", 0);
+        av_dict_set(&c->avio_opts, "stimeout",  "3000000", 0);
+        av_dict_set(&c->avio_opts, "open_timeout",  "3000000", 0);//tcp
+        av_dict_set(&c->avio_opts, "listen_timeout",  "3000000", 0);//tcp
+        av_dict_set(&c->avio_opts, "addrinfo_timeout",  "3000000", 0);//tcp
+        av_dict_set(&c->avio_opts, "dns_cache_timeout",  "3000000", 0);//tcp
+
+        ret = avformat_open_input(&pls->ctx, pls->segments[0]->url, in_fmt, &c->avio_opts);
         if (ret < 0)
             goto fail;
 
@@ -2138,6 +2198,8 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                 int64_t pkt_ts;
                 int64_t ts_diff;
                 AVRational tb;
+                //modified by johnny 2021-4-16
+                av_log(s, AV_LOG_WARNING, "johnny hls_read_packet()->av_read_frame()\n");
                 ret = av_read_frame(pls->ctx, &pls->pkt);
                 if (ret < 0) {
                     //when error occur try to renew m3u8

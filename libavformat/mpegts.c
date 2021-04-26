@@ -2656,6 +2656,7 @@ static void seek_back(AVFormatContext *s, AVIOContext *pb, int64_t pos) {
 
 static int mpegts_read_header(AVFormatContext *s)
 {
+    av_log(s, AV_LOG_WARNING, "johnny mpegts_read_header\n");
     MpegTSContext *ts = s->priv_data;
     AVIOContext *pb   = s->pb;
     uint8_t buf[8 * 1024] = {0};
@@ -2813,6 +2814,7 @@ static int mpegts_raw_read_packet(AVFormatContext *s, AVPacket *pkt)
 
 static int mpegts_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    av_log(s, AV_LOG_WARNING, "johnny mpegts_read_packet\n");
     MpegTSContext *ts = s->priv_data;
     int ret, i;
 

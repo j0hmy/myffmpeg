@@ -1065,6 +1065,9 @@ static int open_input_file(OptionsContext *o, const char *filename)
         av_dict_set(&o->g->format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
     }
+    //添加超时，解决堵塞的问题 johnny 2021-4-16
+    av_log(s, AV_LOG_WARNING, "johnny ffmpeg_opt open_input_file()->avformat_open_input()\n");
+    av_dict_set(&o->g->format_opts, "rw_timeout", "3000000", 0);//warning: passing argument 3 of 'av_dict_set' makes pointer from integer without a cast
     /* open the input file with generic avformat function */
     err = avformat_open_input(&ic, filename, file_iformat, &o->g->format_opts);
     if (err < 0) {

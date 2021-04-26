@@ -74,6 +74,7 @@ static int url_alloc_for_protocol(URLContext **puc, const URLProtocol *up,
                                   const char *filename, int flags,
                                   const AVIOInterruptCB *int_cb)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny avio url_alloc_for_protocol");
     URLContext *uc;
     int err;
 
@@ -165,6 +166,7 @@ fail:
 
 int ffurl_connect(URLContext *uc, AVDictionary **options)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny avio ffurl_connect");
     int err;
     AVDictionary *tmp_opts = NULL;
     AVDictionaryEntry *e;
@@ -290,6 +292,7 @@ static const struct URLProtocol *url_find_protocol(const char *filename)
 int ffurl_alloc(URLContext **puc, const char *filename, int flags,
                 const AVIOInterruptCB *int_cb)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny avio ffurl_alloc");
     const URLProtocol *p = NULL;
 
     p = url_find_protocol(filename);
@@ -309,6 +312,7 @@ int ffurl_open_whitelist(URLContext **puc, const char *filename, int flags,
                          const char *whitelist, const char* blacklist,
                          URLContext *parent)
 {
+    av_log(NULL, AV_LOG_DEBUG, "johnny avio ffurl_open_whitelist");
     AVDictionary *tmp_opts = NULL;
     AVDictionaryEntry *e;
     int ret = ffurl_alloc(puc, filename, flags, int_cb);
@@ -368,42 +372,62 @@ static inline int retry_transfer_wrapper(URLContext *h, uint8_t *buf,
     int ret, len;
     int fast_retries = 5;
     int64_t wait_since = 0;
-
     len = 0;
+    //av_log(h, AV_LOG_DEBUG, "johnny request retry_transfer_wrapper start");
     while (len < size_min) {
-        if (ff_check_interrupt(&h->interrupt_callback))
+
+        if (ff_check_interrupt(&h->interrupt_callback)){
+            av_log(h, AV_LOG_DEBUG, "johnny retry_transfer_wrapper interrupt_callback");
             return AVERROR_EXIT;
-        ret = transfer_func(h, buf + len, size - len);
+        }
+        av_log(h, AV_LOG_DEBUG, "johnny retry_transfer_wrapper doing len %d",len);
+        //transfer_func() maybe blocking so many seconds(several minutes)
+        ret = transfer_func(h, buf + len, size - len);//hls 使用的是ff_http_protocol->http_read() johnny 2021-4-19
+        av_log(h, AV_LOG_DEBUG, "johnny retry_transfer_wrapper transfer_func ret:%d",ret);
+
         if (ret == AVERROR(EINTR))
             continue;
-        if (h->flags & AVIO_FLAG_NONBLOCK)
+        if (h->flags & AVIO_FLAG_NONBLOCK){
+            av_log(h, AV_LOG_DEBUG, "johnny request retry_transfer_wrapper end 1");
             return ret;
+        }
+
         if (ret == AVERROR(EAGAIN)) {
             ret = 0;
             if (fast_retries) {
                 fast_retries--;
+                av_log(h, AV_LOG_DEBUG, "johnny request retry_transfer_wrapper fast_retries %d",fast_retries);
             } else {
                 if (h->rw_timeout) {
+                    av_log(h, AV_LOG_DEBUG, "johnny request retry_transfer_wrapper check rw_timeout %" PRId64,h->rw_timeout);
                     if (!wait_since)
                         wait_since = av_gettime_relative();
-                    else if (av_gettime_relative() > wait_since + h->rw_timeout)
+                    else if (av_gettime_relative() > wait_since + h->rw_timeout){
+                        av_log(h, AV_LOG_DEBUG, "johnny request retry_transfer_wrapper end 2");
                         return AVERROR(EIO);
+                    }
+
                 }
-                av_usleep(1000);
+                av_usleep(1000);//0.1s
             }
-        } else if (ret < 1)
-            return (ret < 0 && ret != AVERROR_EOF) ? ret : len;
+        } else if (ret < 1){
+            av_log(h, AV_LOG_DEBUG, "johnny request retry_transfer_wrapper end 3");
+           return (ret < 0 && ret != AVERROR_EOF) ? ret : len;
+        }
+
         if (ret) {
             fast_retries = FFMAX(fast_retries, 2);
             wait_since = 0;
         }
         len += ret;
     }
+    av_log(h, AV_LOG_DEBUG, "johnny request retry_transfer_wrapper end 4");
     return len;
 }
 
 int ffurl_read(URLContext *h, unsigned char *buf, int size)
 {
+    av_log(h, AV_LOG_DEBUG, "johnny avio ffurl_read start");
     if (!(h->flags & AVIO_FLAG_READ))
         return AVERROR(EIO);
     return retry_transfer_wrapper(h, buf, size, 1, h->prot->url_read);
@@ -661,8 +685,26 @@ int ffurl_shutdown(URLContext *h, int flags)
 
 int ff_check_interrupt(AVIOInterruptCB *cb)
 {
+   // av_log(NULL, AV_LOG_DEBUG, "johnny avio ff_check_interrupt cb:%p",cb);
     int ret;
     if (cb && cb->callback && (ret = cb->callback(cb->opaque)))
         return ret;
     return 0;
+}
+/**
+ * 检查是否超时的回调 解决 johnny 2021-4-16
+ */
+int avformat_check_timeout_interrupt_callback(void *ctx)
+{
+    if(ctx == NULL){
+        av_log(NULL, AV_LOG_WARNING,"johnny av check_timeout ctx NULL\n");
+        return 0;
+    }
+    AVFormatContext* p = ctx;
+    time_t et;
+    et = time(NULL);
+    int l = time(&et);
+    av_log(NULL, AV_LOG_WARNING,"johnny av check_timeout start time:%d\n",p->timeout_st);
+    av_log(NULL, AV_LOG_WARNING,"johnny av check_timeout end time:%d\n",l);
+    return l - p->timeout_st >= 3 ? 1 : 0;//3秒超时
 }

@@ -4083,6 +4083,15 @@ static int get_input_packet(InputFile *f, AVPacket *pkt)
     if (nb_input_files > 1)
         return get_input_packet_mt(f, pkt);
 #endif
+    //由于网络堵塞或者其它问题导致packet丢失,无法读取,导致堵塞 设置超时，解决 johnny 2021-4-16
+
+    f->ctx->interrupt_callback.callback = avformat_check_timeout_interrupt_callback;
+    f->ctx->interrupt_callback.opaque = (void*)f->ctx;
+    time_t start_time;
+    start_time = time(NULL);
+    int l = time(&start_time);
+    f->ctx->timeout_st = l;//记录开始时间 秒
+    av_log(s, AV_LOG_WARNING, "johnny get_input_packet() set check_timeout start time %d\n",f->ctx->timeout_st);
     return av_read_frame(f->ctx, pkt);
 }
 

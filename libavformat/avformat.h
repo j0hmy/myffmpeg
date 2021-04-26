@@ -1931,6 +1931,10 @@ typedef struct AVFormatContext {
      * - decoding: set by user
      */
     int max_streams;
+    /**
+     * 超时设置的开始时间 johnny 2021-4-16
+     */
+    int timeout_st;
 } AVFormatContext;
 
 #if FF_API_FORMAT_GET_SET
@@ -2937,6 +2941,11 @@ int av_match_ext(const char *filename, const char *extensions);
  */
 int avformat_query_codec(const AVOutputFormat *ofmt, enum AVCodecID codec_id,
                          int std_compliance);
+
+/**
+ * 检查是否超时的回调 解决 johnny 2021-4-16
+ */
+int avformat_check_timeout_interrupt_callback(void *ctx);
 
 /**
  * @defgroup riff_fourcc RIFF FourCCs

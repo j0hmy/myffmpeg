@@ -361,7 +361,7 @@ int ff_http_do_new_request(URLContext *h, const char *uri)
     if (!s->location)
         return AVERROR(ENOMEM);
 
-    av_log(s, AV_LOG_INFO, "Opening \'%s\' for %s\n", uri, h->flags & AVIO_FLAG_WRITE ? "writing" : "reading");
+    av_log(s, AV_LOG_INFO, "ff_http_do_new_request Opening \'%s\' for %s\n", uri, h->flags & AVIO_FLAG_WRITE ? "writing" : "reading");
     ret = http_open_cnx(h, &options);
     av_dict_free(&options);
     return ret;
@@ -502,6 +502,8 @@ static int http_handshake(URLContext *c)
 
 static int http_listen(URLContext *h, const char *uri, int flags,
                        AVDictionary **options) {
+
+    av_log(NULL, AV_LOG_DEBUG, "johnny http http_listen");
     HTTPContext *s = h->priv_data;
     int ret;
     char hostname[1024], proto[10];
@@ -604,6 +606,7 @@ static int http_getc(HTTPContext *s)
 {
     int len;
     if (s->buf_ptr >= s->buf_end) {
+        av_log(s, AV_LOG_DEBUG, "johnny request http_getc");
         len = ffurl_read(s->hd, s->buffer, BUFFER_SIZE);
         if (len < 0) {
             return len;
@@ -621,7 +624,7 @@ static int http_get_line(HTTPContext *s, char *line, int line_size)
 {
     int ch;
     char *q;
-
+    av_log(s, AV_LOG_DEBUG, "johnny request http_get_line start");
     q = line;
     for (;;) {
         ch = http_getc(s);
@@ -1145,6 +1148,7 @@ static int http_read_header(URLContext *h, int *new_location)
     int err = 0;
 
     s->chunksize = UINT64_MAX;
+    av_log(h, AV_LOG_DEBUG, "johnny request http_read_header\n");
 
     for (;;) {
         if ((err = http_get_line(s, line, sizeof(line))) < 0)
@@ -1338,12 +1342,15 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
         err = 0;
         goto done;
     }
-
+    //当发生网络抖动或者其他网络原因导致可能会一直卡在这个地方,在等待读取数据，johnny 2021-4-16
+    av_log(h, AV_LOG_DEBUG, "johnny request wait for header: %s\n", s->buffer);
     /* wait for header */
     err = http_read_header(h, new_location);
-    if (err < 0)
+    if (err < 0){
+        av_log(h, AV_LOG_DEBUG, "johnny request header err: %d\n", err);
         goto done;
-
+     }
+    av_log(h, AV_LOG_DEBUG, "johnny request header done: %s\n", s->buffer);
     if (*new_location)
         s->off = off;
 
@@ -1365,6 +1372,7 @@ done:
 
 static int http_buf_read(URLContext *h, uint8_t *buf, int size)
 {
+    av_log(h, AV_LOG_DEBUG, "johnny http http_buf_read start");
     HTTPContext *s = h->priv_data;
     int len;
 
@@ -1440,6 +1448,7 @@ static int http_buf_read(URLContext *h, uint8_t *buf, int size)
 #define DECOMPRESS_BUF_SIZE (256 * 1024)
 static int http_buf_read_compressed(URLContext *h, uint8_t *buf, int size)
 {
+    av_log(h, AV_LOG_WARNING, "johnny http http_buf_read_compressed() start\n");
     HTTPContext *s = h->priv_data;
     int ret;
 
@@ -1477,7 +1486,7 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
     int err, new_location, read_ret;
     int64_t seek_ret;
     int reconnect_delay = 0;
-
+    av_log(h, AV_LOG_WARNING, "johnny http http_read_stream() start\n");
     if (!s->hd)
         return AVERROR_EOF;
 
@@ -1493,6 +1502,7 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
 #endif /* CONFIG_ZLIB */
     read_ret = http_buf_read(h, buf, size);
     while (read_ret < 0) {
+        av_log(h, AV_LOG_WARNING, "johnny http http_read_stream() while read_ret:%d\n",read_ret);
         uint64_t target = h->is_streamed ? 0 : s->off;
 
         if (read_ret == AVERROR_EXIT)
@@ -1529,6 +1539,7 @@ static int http_read_stream(URLContext *h, uint8_t *buf, int size)
 // Assumes partial reads are an error.
 static int http_read_stream_all(URLContext *h, uint8_t *buf, int size)
 {
+    av_log(h, AV_LOG_WARNING, "johnny http http_read_stream_all() start\n");
     int pos = 0;
     while (pos < size) {
         int len = http_read_stream(h, buf + pos, size - pos);
@@ -1605,6 +1616,7 @@ static int store_icy(URLContext *h, int size)
 
 static int http_read(URLContext *h, uint8_t *buf, int size)
 {
+    av_log(h, AV_LOG_WARNING, "johnny http http_read() start\n");
     HTTPContext *s = h->priv_data;
 
     if (s->icy_metaint > 0) {
@@ -1815,6 +1827,7 @@ static int http_proxy_close(URLContext *h)
 
 static int http_proxy_open(URLContext *h, const char *uri, int flags)
 {
+    av_log(h, AV_LOG_DEBUG, "johnny http http_proxy_open start");
     HTTPContext *s = h->priv_data;
     char hostname[1024], hoststr[1024];
     char auth[1024], pathbuf[1024], *path;

@@ -330,6 +330,8 @@ static int open_file(AVFormatContext *avf, unsigned fileno)
     if (!new_avf)
         return AVERROR(ENOMEM);
 
+    av_log(NULL, AV_LOG_DEBUG, "johnny concatdec open_file");
+
     new_avf->flags |= avf->flags & ~AVFMT_FLAG_CUSTOM_IO;
 
 #ifdef FF_API_LAVF_KEEPSIDE_FLAG

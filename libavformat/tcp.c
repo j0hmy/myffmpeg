@@ -342,6 +342,7 @@ int ijk_tcp_getaddrinfo_nonblock(const char *hostname, const char *servname,
 /* return non zero if error */
 static int tcp_open(URLContext *h, const char *uri, int flags)
 {
+    av_log(h, AV_LOG_DEBUG, "johnny request tcp_open");
     struct addrinfo hints = { 0 }, *ai, *cur_ai;
     int port, fd = -1;
     TCPContext *s = h->priv_data;
@@ -546,6 +547,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 /* return non zero if error */
 static int tcp_fast_open(URLContext *h, const char *http_request, const char *uri, int flags)
 {
+    av_log(h, AV_LOG_DEBUG, "johnny request tcp_fast_open");
     struct addrinfo hints = { 0 }, *ai, *cur_ai;
     int port, fd = -1;
     TCPContext *s = h->priv_data;
@@ -674,6 +676,7 @@ static int tcp_fast_open(URLContext *h, const char *http_request, const char *ur
         if ((ret = ff_sendto(fd, http_request, strlen(http_request), FAST_OPEN_FLAG,
                  cur_ai->ai_addr, cur_ai->ai_addrlen, s->open_timeout / 1000, h, !!cur_ai->ai_next)) < 0) {
             s->fastopen_success = 0;
+            av_log(NULL, AV_LOG_INFO, "tcp fail open uri = %s\n", uri);
             if (av_application_on_tcp_did_open(s->app_ctx, ret, fd, &control))
                 goto fail1;
             if (ret == AVERROR_EXIT)
